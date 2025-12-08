@@ -28,9 +28,11 @@ export default async function DealsPage() {
     }),
   ]);
 
-  // Calculate total value per stage
+  // Calculate total value per stage and sort deals by order
   const stageValues = stages.map((stage) => {
-    const stageDeals = deals.filter((d) => d.stageId === stage.id);
+    const stageDeals = deals
+      .filter((d) => d.stageId === stage.id)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const total = stageDeals.reduce((sum, d) => sum + Number(d.value), 0);
     return { ...stage, deals: stageDeals, total };
   });
@@ -84,7 +86,6 @@ export default async function DealsPage() {
       <div className="flex-1 min-h-0">
         <KanbanBoard
           stages={kanbanStages}
-          deals={deals}
           companies={companies}
           contacts={contacts}
           allStages={stages}

@@ -10,11 +10,13 @@ import {
   Handshake,
   CheckSquare,
   BarChart3,
+  Calendar,
   Settings,
   LogOut,
 } from "lucide-react";
 import { logout } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/global-search";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -22,6 +24,7 @@ const navigation = [
   { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Deals", href: "/deals", icon: Handshake },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
@@ -48,8 +51,13 @@ export function Sidebar({ user }: SidebarProps) {
         </Link>
       </div>
 
+      {/* Search */}
+      <div className="px-3 py-3">
+        <GlobalSearch />
+      </div>
+
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 px-3 py-2">
         {navigation.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (

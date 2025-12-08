@@ -136,7 +136,8 @@ export async function updateDeal(
 
 export async function updateDealStage(
   id: string,
-  stageId: string
+  stageId: string,
+  order?: number
 ): Promise<{ error?: string }> {
   const session = await auth();
   if (!session?.user?.id) {
@@ -146,13 +147,39 @@ export async function updateDealStage(
   try {
     await db.deal.update({
       where: { id, ownerId: session.user.id },
-      data: { stageId },
+      data: { stageId, order: order ?? 0 },
     });
 
     revalidatePath("/deals");
     return {};
   } catch {
     return { error: "Failed to update deal stage" };
+  }
+}
+
+export async function reorderDeals(
+  dealIds: string[]
+): Promise<{ error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { error: "Unauthorized" };
+  }
+
+  try {
+    // Update order for each deal
+    await Promise.all(
+      dealIds.map((id, index) =>
+        db.deal.update({
+          where: { id, ownerId: session.user.id },
+          data: { order: index },
+        })
+      )
+    );
+
+    revalidatePath("/deals");
+    return {};
+  } catch {
+    return { error: "Failed to reorder deals" };
   }
 }
 
@@ -234,13 +261,14 @@ export async function getDeals() {
       company: { select: { id: true, name: true } },
       contact: { select: { id: true, name: true } },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
   });
 
   // Serialize Decimal values to numbers for client components
   return deals.map((deal) => ({
     ...deal,
     value: Number(deal.value),
+    order: deal.order,
   }));
 }
 

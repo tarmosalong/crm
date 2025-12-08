@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   TrendingUp,
   TrendingDown,
@@ -9,7 +8,12 @@ import {
   Users,
   Building2,
   Handshake,
+  BarChart3,
+  PieChart as PieChartIcon,
+  LineChart as LineChartIcon,
 } from "lucide-react";
+import { PipelineBarChart, PipelinePieChart, MonthlyTrendChart, WinRateChart, DealsCountChart } from "./charts";
+import { ExportButtons } from "./export-buttons";
 
 async function getReportData(userId: string) {
   const now = new Date();
@@ -25,7 +29,7 @@ async function getReportData(userId: string) {
   // Deal stats by stage
   const dealsByStage = await Promise.all(
     stages
-      .filter((s) => s.name !== "Won" && s.name !== "Lost")
+      .filter((s) => s.name !== "Won" && s.name !== "Lost" && s.name !== "Võidetud" && s.name !== "Kaotatud")
       .map(async (stage) => {
         const deals = await db.deal.aggregate({
           where: { ownerId: userId, stageId: stage.id, status: "OPEN" },
@@ -118,6 +122,46 @@ async function getReportData(userId: string) {
     db.deal.count({ where: { ownerId: userId } }),
   ]);
 
+  // Monthly data for trend chart (last 6 months)
+  const monthlyData = [];
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  for (let i = 5; i >= 0; i--) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    
+    const [wonData, lostData] = await Promise.all([
+      db.deal.aggregate({
+        where: {
+          ownerId: userId,
+          status: "WON",
+          wonDate: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { value: true },
+        _count: true,
+      }),
+      db.deal.aggregate({
+        where: {
+          ownerId: userId,
+          status: "LOST",
+          updatedAt: { gte: monthStart, lte: monthEnd },
+        },
+        _sum: { value: true },
+        _count: true,
+      }),
+    ]);
+
+    const totalClosed = wonData._count + lostData._count;
+    const rate = totalClosed > 0 ? Math.round((wonData._count / totalClosed) * 100) : 0;
+
+    monthlyData.push({
+      month: monthNames[monthStart.getMonth()],
+      won: Number(wonData._sum.value || 0),
+      lost: Number(lostData._sum.value || 0),
+      winRate: rate,
+    });
+  }
+
   return {
     dealsByStage,
     wonThisMonth: {
@@ -144,6 +188,7 @@ async function getReportData(userId: string) {
     contactsCount,
     companiesCount,
     dealsCount,
+    monthlyData,
   };
 }
 
@@ -157,14 +202,22 @@ export default async function ReportsPage() {
     ? Math.round(((data.wonThisMonth.value - data.wonLastMonth.value) / data.wonLastMonth.value) * 100)
     : 0;
 
+  const winRateData = data.monthlyData.map((d) => ({
+    month: d.month,
+    rate: d.winRate,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Reports</h1>
-        <p className="text-slate-400 mt-1">
-          Track your sales performance and pipeline health
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Reports</h1>
+          <p className="text-slate-400 mt-1">
+            Track your sales performance and pipeline health
+          </p>
+        </div>
+        <ExportButtons />
       </div>
 
       {/* Key Metrics */}
@@ -237,61 +290,86 @@ export default async function ReportsPage() {
         </Card>
       </div>
 
-      {/* Pipeline Funnel */}
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monthly Trend */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <LineChartIcon className="h-5 w-5 text-indigo-500" />
+              Monthly Performance
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Won vs Lost deals over the last 6 months
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyTrendChart data={data.monthlyData} />
+          </CardContent>
+        </Card>
+
+        {/* Pipeline Distribution */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <PieChartIcon className="h-5 w-5 text-violet-500" />
+              Pipeline Distribution
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Deal value by stage
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PipelinePieChart data={data.dealsByStage} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* More Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pipeline Value Bar Chart */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-emerald-500" />
+              Pipeline Value by Stage
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Total value in each stage
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PipelineBarChart data={data.dealsByStage} />
+          </CardContent>
+        </Card>
+
+        {/* Win Rate Trend */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-amber-500" />
+              Win Rate Trend
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Monthly win rate percentage
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WinRateChart data={winRateData} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Deals by Stage Count */}
       <Card className="bg-slate-800/50 border-slate-700">
         <CardHeader>
-          <CardTitle className="text-white">Pipeline by Stage</CardTitle>
+          <CardTitle className="text-white">Deals Count by Stage</CardTitle>
           <CardDescription className="text-slate-400">
-            Current deals distributed across your sales stages
+            Number of deals in each pipeline stage
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-              {data.dealsByStage.map((stage) => {
-              const maxValue = Math.max(...data.dealsByStage.map((s) => s.value), 1);
-              const percentage = (stage.value / maxValue) * 100;
-
-              return (
-                <div key={stage.stage} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: stage.color }}
-                      />
-                      <span className="text-sm font-medium text-white">
-                        {stage.stage}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className="bg-slate-700 text-slate-300"
-                      >
-                        {stage.count} deals
-                      </Badge>
-                    </div>
-                    <span className="text-sm font-medium text-white">
-                      €{stage.value.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${percentage}%`,
-                        backgroundColor: stage.color,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-
-            {data.dealsByStage.length === 0 && (
-              <p className="text-slate-500 text-center py-8">
-                No active deals in pipeline
-              </p>
-            )}
-          </div>
+          <DealsCountChart data={data.dealsByStage} />
         </CardContent>
       </Card>
 
@@ -348,4 +426,3 @@ export default async function ReportsPage() {
     </div>
   );
 }
-
